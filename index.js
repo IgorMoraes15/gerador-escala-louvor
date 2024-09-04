@@ -1,18 +1,22 @@
 const fs = require('fs');
 
 const musicians = {
-    fixed: ['Igor', 'Alessandro', 'Duda', 'Arthur'],
-    ministers: ['Igor', 'Arthur', 'Daniela', 'Rayssa', 'Alessandro', 'Lucilene'],
-    singers: ['Rayssa', 'Daniela', 'Lucilene']
+    fixed: ['Igor', 'Alessandro', 'Duda', 'Arthur', 'Edy'],
+    ministers: ['Igor', 'Edy', 'Arthur', 'Ana', 'Daniela', 'Vanessa', 'Rayssa', 'Alessandro', 'Lucilene'],
+    singers: ['Ana', 'Vanessa', 'Rayssa', 'Daniela', 'Lucilene']
 };
 
 const generateSchedule = () => {
     const schedule = [];
     const singerCounts = {
-        'Rayssa': { count: 0, dates: [] },
-        'Daniela': { count: 0, dates: [] },
-        'Lucilene': { count: 0, dates: [] }
+        'Ana': { count: 0, dates: [], lastWeek: -1 },
+        'Vanessa': { count: 0, dates: [], lastWeek: -1 },
+        'Rayssa': { count: 0, dates: [], lastWeek: -1 },
+        'Daniela': { count: 0, dates: [], lastWeek: -1 },
+        'Lucilene': { count: 0, dates: [], lastWeek: -1 }
     };
+
+    const usedCombinations = []; // Armazena as combinações de vozes já usadas
 
     const getNextSunday = (date) => {
         let nextSunday = new Date(date);
@@ -22,12 +26,50 @@ const generateSchedule = () => {
 
     let currentSunday = getNextSunday(new Date());
 
-    musicians.ministers.forEach(minister => {
+    musicians.ministers.forEach((minister, weekIndex) => {
         let voices = musicians.singers.filter(singer => singer !== minister);
-        voices.sort((a, b) => singerCounts[a].count - singerCounts[b].count); // Sort by the number of times each singer has been used
+        
+        // Sort voices by how long it's been since they last sang (and count)
+        voices.sort((a, b) => {
+            // Prioritize based on last participation, then on total count
+            if (singerCounts[a].lastWeek !== singerCounts[b].lastWeek) {
+                return singerCounts[a].lastWeek - singerCounts[b].lastWeek;
+            }
+            return singerCounts[a].count - singerCounts[b].count;
+        });
 
-        const voice1 = minister === 'Arthur' ? voices[0] : (musicians.singers.includes(minister) ? minister : voices[0]);
-        const voice2 = voices.find(v => v !== voice1);
+        // Função para escolher uma combinação de vozes não repetida e com intervalo de semanas
+        const findUniqueVoices = (voices, minister) => {
+            // Se o ministro é um dos cantores, ele precisa estar como uma das vozes
+            if (musicians.singers.includes(minister)) {
+                const voice1 = minister; // Ministro será Voz 1
+                const voice2 = voices.find(v => v !== voice1 && !usedCombinations.includes([voice1, v].toString())); // Seleciona uma voz diferente para Voz 2
+                return [voice1, voice2];
+            } else {
+                // Ministro não é um cantor, então encontra uma combinação única para as vozes
+                for (let i = 0; i < voices.length; i++) {
+                    for (let j = i + 1; j < voices.length; j++) {
+                        const combination = [voices[i], voices[j]];
+                        const reverseCombination = [voices[j], voices[i]];
+
+                        // Verifica se a combinação ou a inversa já foi usada
+                        if (!usedCombinations.some(used =>
+                            (used[0] === combination[0] && used[1] === combination[1]) ||
+                            (used[0] === reverseCombination[0] && used[1] === reverseCombination[1])
+                        )) {
+                            return combination; // Retorna uma combinação única
+                        }
+                    }
+                }
+                // Se não encontrar nenhuma combinação única, retorna a primeira disponível
+                return [voices[0], voices[1]];
+            }
+        };
+
+        const [voice1, voice2] = findUniqueVoices(voices, minister);
+
+        // Salvar a combinação usada
+        usedCombinations.push([voice1, voice2].toString());
 
         const formattedDate = currentSunday.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 
@@ -38,15 +80,20 @@ const generateSchedule = () => {
                 'Guitarra e Voz': 'Igor',
                 'Violão': 'Alessandro',
                 'Teclado': 'Duda',
+                'Baixo': 'Edy',
                 'Bateria': 'Arthur',
                 'Voz 1': voice1,
                 'Voz 2': voice2
             }
         });
 
+        // Atualiza contagem e última semana de participação
         singerCounts[voice1].count++;
+        singerCounts[voice1].lastWeek = weekIndex;
         singerCounts[voice1].dates.push(formattedDate);
+
         singerCounts[voice2].count++;
+        singerCounts[voice2].lastWeek = weekIndex;
         singerCounts[voice2].dates.push(formattedDate);
 
         currentSunday = getNextSunday(currentSunday);
@@ -54,6 +101,8 @@ const generateSchedule = () => {
 
     return { schedule, singerCounts };
 };
+
+
 
 const { schedule, singerCounts } = generateSchedule();
 
@@ -156,6 +205,13 @@ const generateHTML = (schedule, singerCounts) => {
                         <td>Violão</td>`;
     schedule.forEach(day => {
         html += `<td>${day.musicians['Violão']}</td>`;
+    });
+    html += `
+                    </tr>
+                    <tr>
+                        <td>Baixo</td>`;
+    schedule.forEach(day => {
+    html += `<td>${day.musicians['Baixo']}</td>`;
     });
     html += `
                     </tr>
